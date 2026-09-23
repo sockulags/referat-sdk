@@ -11,15 +11,22 @@ export interface LaunchResult {
   pid: number | undefined
 }
 
+function succeeds(command: string, args: string[]): Promise<boolean> {
+  return new Promise((resolve) =>
+    execFile(command, args, { timeout: 5000, windowsHide: true }, (error) => resolve(!error))
+  )
+}
+
 /**
- * Whether a process with this executable's file name is running. Referat has
- * no single-instance lock, so a second start would open a second app working
- * on the same data. Any failure to check counts as "not running".
+ * Whether Referat is running. Referat has no single-instance lock, so a second
+ * start would open a second app working on the same data. Windows matches the
+ * executable's image name; elsewhere a process matches by name or by the
+ * executable path in its command line. A failed check counts as "not running".
  */
-function isRunning(executablePath: string): Promise<boolean> {
+async function isRunning(executablePath: string): Promise<boolean> {
   const name = path.basename(executablePath)
-  return new Promise((resolve) => {
-    if (process.platform === 'win32') {
+  if (process.platform === 'win32') {
+    return new Promise((resolve) =>
       execFile(
         'tasklist',
         ['/FI', `IMAGENAME eq ${name}`, '/FO', 'CSV', '/NH'],
@@ -27,10 +34,10 @@ function isRunning(executablePath: string): Promise<boolean> {
         (error, stdout) =>
           resolve(!error && stdout.toLowerCase().includes(`"${name.toLowerCase()}"`))
       )
-    } else {
-      execFile('pgrep', ['-x', name], { timeout: 5000 }, (error) => resolve(!error))
-    }
-  })
+    )
+  }
+  const escapedPath = executablePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return (await succeeds('pgrep', ['-x', name])) || succeeds('pgrep', ['-f', escapedPath])
 }
 
 /**

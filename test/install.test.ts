@@ -1,4 +1,5 @@
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -154,26 +155,36 @@ describe('launchReferat', () => {
     )
   })
 
-  it('starts the executable detached when it is not running', async () => {
-    // A copy of Node under a unique name stands in for the app: with no
-    // arguments and no stdin it exits at once.
+  /** A copy of Node under a unique name stands in for the app. */
+  function standIn(tag: string): string {
     const exe = path.join(
       makeTempDir(),
-      `rsdk-${process.pid}${process.platform === 'win32' ? '.exe' : ''}`
+      `rsdk${tag}${process.pid}${process.platform === 'win32' ? '.exe' : ''}`
     )
     copyFileSync(process.execPath, exe)
+    return exe
+  }
+
+  it('starts the executable detached when it is not running', async () => {
+    // With no arguments and no stdin, Node exits at once.
+    const exe = standIn('a')
     const result = await launchReferat({ executablePath: exe })
     expect(result).toMatchObject({ executablePath: exe, alreadyRunning: false })
     expect(typeof result.pid).toBe('number')
   })
 
   it('does not start a second instance when it is already running', async () => {
-    // The test runner itself is a running Node process.
-    const result = await launchReferat({ executablePath: process.execPath })
-    expect(result).toEqual({
-      executablePath: process.execPath,
-      alreadyRunning: true,
-      pid: undefined
-    })
+    const exe = standIn('b')
+    const running = spawn(exe, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+    await new Promise((resolve) => running.once('spawn', resolve))
+    try {
+      expect(await launchReferat({ executablePath: exe })).toEqual({
+        executablePath: exe,
+        alreadyRunning: true,
+        pid: undefined
+      })
+    } finally {
+      running.kill()
+    }
   })
 })
