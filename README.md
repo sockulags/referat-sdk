@@ -28,6 +28,9 @@ install:
 npm install github:sockulags/referat-sdk
 ```
 
+npm 11 may warn that `referat-sdk` has a `prepare` script not covered by `allowScripts`; the build
+still runs. Run `npm approve-scripts referat-sdk` to record the approval and silence the warning.
+
 Requires Node.js 20 or later (Electron 43, which Referat runs on, bundles a newer Node). The package
 is ESM-only and ships type declarations.
 
